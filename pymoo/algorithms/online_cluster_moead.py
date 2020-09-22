@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from scipy.spatial.distance import cdist
 
@@ -28,7 +29,9 @@ class OnlineClusterMOEAD(AggregatedGeneticAlgorithm):
                  cluster=KMeans,
                  number_of_clusters=2,
                  interval_of_aggregations=1,
-                 save_current_iteration_data=True,
+                 current_execution_number=0,
+                 save_dir='',
+                 save_data=True,
                  **kwargs):
         """
 
@@ -50,7 +53,9 @@ class OnlineClusterMOEAD(AggregatedGeneticAlgorithm):
         self.cluster = cluster
         self.number_of_clusters = number_of_clusters
         self.interval_of_aggregations = interval_of_aggregations
-        self.save_current_iteration_data = save_current_iteration_data
+        self.current_execution_number = current_execution_number
+        self.save_dir = save_dir
+        self.save_data = save_data
         self.aggregations = []
         self.hvs = []
         self.igds = []
@@ -103,6 +108,8 @@ class OnlineClusterMOEAD(AggregatedGeneticAlgorithm):
         
         self.hv = get_performance_indicator("hv", ref_point=np.array([1.2]*self.problem.n_obj))
         self.igd_plus = get_performance_indicator("igd+", self.problem.pareto_front(ref_dirs=self.ref_dirs))
+        self.create_result_folders()
+        
         
     def _next(self):
         repair, crossover, mutation = self.repair, self.mating.crossover, self.mating.mutation
@@ -120,7 +127,12 @@ class OnlineClusterMOEAD(AggregatedGeneticAlgorithm):
         current_igd = self.get_igd(pop)
         self.hvs.append(current_hv)
         self.igds.append(current_igd)
+
         print('Metrics HV {} IDG+ {}'.format(current_hv, current_igd))
+
+        if self.save_data:
+            self.save_current_iteration_files(pop)
+        
         self.reduce_population(pop, self.transformation_matrix)
 
         # iterate for each member of the population in random order
@@ -160,9 +172,6 @@ class OnlineClusterMOEAD(AggregatedGeneticAlgorithm):
             pop[N[I]] = off
         self.current_generation += 1
 
-        if self.save_current_iteration_data:
-            self.save_current_iteration_files()
-
     def get_transformation_matrix(self, cluster):
         return pd.get_dummies(cluster.labels_).T.values
     
@@ -178,14 +187,11 @@ class OnlineClusterMOEAD(AggregatedGeneticAlgorithm):
     def _finalize(self):
         for individual in self.pop:
             individual.F = self.problem.evaluate(individual.get('X'))
-
-        plt.plot(self.hvs)
-        plt.show()
-
-        plt.plot(self.igds)
-        plt.show()
         
-        print(self.aggregations)
+        if self.save_data:
+            self.save_algorithm_data('aggregations.txt', self.aggregations)
+            self.save_algorithm_data('hv_convergence.txt', self.hvs)
+            self.save_algorithm_data('igd_convergence.txt', self.igds)
     
     def apply_cluster_reduction(self):
         if self.current_generation % self.interval_of_aggregations == 0:
@@ -211,7 +217,23 @@ class OnlineClusterMOEAD(AggregatedGeneticAlgorithm):
     def get_igd(self, population):
         return self.igd_plus.calc(population.get('F'))
 
-    def save_current_iteration_files(self):
-        pass
-         
-# parse_doc_string(MOEAD.__init__)
+    def save_current_iteration_files(self, population):
+        variables = [individual.get('X') for individual in population]
+        objectives = [individual.get('F') for individual in population]
+        self.save_algorithm_data('variables_{}.txt'.format(self.current_generation), variables)
+        self.save_algorithm_data('objectives_{}.txt'.format(self.current_generation), objectives)
+        
+    def save_algorithm_data(self, file_name, data_list):
+        with open(os.path.join(self.full_path, file_name),'w') as file:
+            for data in data_list:
+                file.write(str(data) + '\n')
+
+    def create_result_folders(self):
+        folder = 'Execution {}'.format(self.current_execution_number)
+        self.full_path = os.path.join(self.save_dir, folder)
+        
+        if not os.path.exists(self.full_path):
+            os.makedirs(self.full_path)
+            print('Execution folder created!')
+        else:
+            print('Folder already exists!')

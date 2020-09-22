@@ -2,6 +2,12 @@ from pymoo.algorithms.online_cluster_moead import OnlineClusterMOEAD
 from pymoo.algorithms.moead import MOEAD 
 from pymoo.factory import get_problem, get_visualization, get_reference_directions
 from pymoo.optimize import minimize
+
+import os
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 from sklearn.cluster import AgglomerativeClustering, KMeans
 
 class ExperimentOnlineClusterMOEAD(object):
@@ -14,24 +20,26 @@ class ExperimentOnlineClusterMOEAD(object):
                  cluster=KMeans,
                  number_of_clusters=2,
                  interval_of_aggregations=1,
-                 save_algorith_current_iteration_data=True,
+                 save_data=True,
                  problem=get_problem("dtlz1"),
                  number_of_executions=1,
                  termination=('n_gen',100),
+                 save_dir='',
                  verbose=False,
                  save_history=True,
                  use_different_seeds=True,
                  show_heat_map=True,
                  **kwargs):
 
-        self.save_algorith_current_iteration_data = save_algorith_current_iteration_data
+        self.save_data = save_data
         self.problem = problem
         self.number_of_executions = number_of_executions
         self.termination = termination
+        self.save_dir = save_dir
         self.verbose = verbose
         self.save_history = save_history
         self.show_heat_map = show_heat_map
-        
+
         if use_different_seeds:
             self.algorithms  = [OnlineClusterMOEAD(
                                         ref_dirs,
@@ -41,7 +49,9 @@ class ExperimentOnlineClusterMOEAD(object):
                                         seed=i,
                                         number_of_clusters=number_of_clusters,
                                         interval_of_aggregations=interval_of_aggregations,
-                                        save_current_iteration_data=self.save_algorith_current_iteration_data,
+                                        current_execution_number=i,
+                                        save_dir=self.save_dir,
+                                        save_data=self.save_data,
                                         cluster=cluster) for i in range(self.number_of_executions)]
         else:
             self.algorithms  = [OnlineClusterMOEAD(
@@ -52,9 +62,12 @@ class ExperimentOnlineClusterMOEAD(object):
                                         seed=1,
                                         number_of_clusters=number_of_clusters,
                                         interval_of_aggregations=interval_of_aggregations,
-                                        save_current_iteration_data=self.save_algorith_current_iteration_data,
+                                        current_execution_number=i,
+                                        save_dir=self.save_dir,
+                                        save_data=self.save_data,
                                         cluster=cluster) for i in range(self.number_of_executions)]
     def run(self):
+        print('run is ok!')
         self.current_execution = 1
         for algorithm in self.algorithms:
             res = minimize(
@@ -64,17 +77,47 @@ class ExperimentOnlineClusterMOEAD(object):
                  verbose=self.verbose,
                  save_history=self.save_history)
 
-            get_visualization("scatter").add(res.F).show()
-            self.save_current_execution_files()
+            # get_visualization("scatter").add(res.F).show()
             self.current_execution +=1
 
         #generate heatmap if number of executions is greater than 1
         if self.show_heat_map:
-            self.generate_aggregation_heat_map()
-    
-    def save_current_execution_files(self):
-        
-        pass
+            self.generate_heat_map()
 
-    def generate_aggregation_heat_map(self):
-        pass
+    def generate_heat_map(self):
+        aggregations = []
+        for i in range(self.number_of_executions):
+            aggregations.append(pd.read_csv(os.path.join(self.save_dir,'Execution {}'.format(i), 'aggregations.txt'), header=None))
+
+        aggregations = pd.concat(aggregations, axis=1)
+        aggregations.columns = ['exec_{}'.format(i) for i in range(self.number_of_executions)]
+        aggregation_list = [aggregations['exec_{}'.format(i)].value_counts().keys().values.tolist() 
+                            for i in range(self.number_of_executions)]
+        unique_aggregations = list(set([j  for i in aggregation_list for j in i]))
+        unique_aggregations.sort(key = lambda x: x.split('-')[1], reverse=True)
+        data_transposed = aggregations.T
+
+        number_of_aggregations = len(unique_aggregations)
+        number_of_generations = len(aggregations.index)
+        heat_map = pd.DataFrame(data=np.zeros((number_of_aggregations, number_of_generations)))
+        heat_map.index = unique_aggregations
+
+        for i in range(number_of_generations):
+            for k,v in data_transposed[i].value_counts().items():
+                heat_map.at[k, i] = v
+
+        for i in range(number_of_generations):
+            if heat_map[i].values.sum() != self.number_of_executions:
+                print('Error in generation {}'.format(i))
+
+        plt.figure(figsize=(18,10))
+        sns.heatmap(heat_map.values, yticklabels=heat_map.index.values, cmap="Blues")
+
+        plt.xlabel('Generation', fontsize=20)
+
+        plt.yticks(fontsize=13)
+        plt.ylabel('Aggregation', fontsize=20)
+
+        plt.title('Aggregation Heat Map', fontsize=20)
+        plt.savefig(os.path.join(self.save_dir, 'heat_map.pdf'))
+        plt.show()
