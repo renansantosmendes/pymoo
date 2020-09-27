@@ -1,4 +1,4 @@
-
+ 
 from scipy.spatial.distance import cdist
 
 from pymoo.algorithms.aggregated_genetic_algorithm import AggregatedGeneticAlgorithm
@@ -20,7 +20,7 @@ from sklearn.cluster import KMeans
 # Implementation
 # =========================================================================================================
 
-class OnlineClusterMOEAD(AggregatedGeneticAlgorithm):
+class OfflineClusterMOEAD(AggregatedGeneticAlgorithm):
 
     def __init__(self,
                  ref_dirs,
@@ -30,9 +30,7 @@ class OnlineClusterMOEAD(AggregatedGeneticAlgorithm):
                  display=MultiObjectiveDisplay(),
                  cluster=KMeans,
                  number_of_clusters=2,
-                 interval_of_aggregations=1,
                  current_execution_number=0,
-                 use_random_aggregation=False,
                  save_dir='',
                  save_data=True,
                  **kwargs):
@@ -55,15 +53,13 @@ class OnlineClusterMOEAD(AggregatedGeneticAlgorithm):
         self.decomposition = decomposition
         self.cluster = cluster
         self.number_of_clusters = number_of_clusters
-        self.interval_of_aggregations = interval_of_aggregations
         self.current_execution_number = current_execution_number
-        self.use_random_aggregation = use_random_aggregation
         self.save_dir = save_dir
         self.save_data = save_data
         self.aggregations = []
         self.hvs = []
         self.igds = []
-        
+
         set_if_none(kwargs, 'pop_size', len(ref_dirs))
         set_if_none(kwargs, 'sampling', FloatRandomSampling())
         set_if_none(kwargs, 'crossover', SimulatedBinaryCrossover(prob=1.0, eta=20))
@@ -122,7 +118,6 @@ class OnlineClusterMOEAD(AggregatedGeneticAlgorithm):
         pop = self.pop
 
         self.evaluate_population_in_original_objectives(pop)
-        self.apply_cluster_reduction()
         self.aggregations.append(self.get_aggregation_string(self.transformation_matrix))
         
         print(self.get_aggregation_string(self.transformation_matrix))
@@ -179,13 +174,6 @@ class OnlineClusterMOEAD(AggregatedGeneticAlgorithm):
     def get_transformation_matrix(self, cluster):
         return pd.get_dummies(cluster.labels_).T.values
     
-    def get_random_transformation_matrix(self, cluster):
-        self.number_of_clusters
-        self.problem.n_obj
-
-        np.random.randint()
-        pass
-
     def reduce_population(self, population, transformation_matrix):
         for individual in population:
             individual.F = self.problem.evaluate(individual.get('X'))
@@ -206,25 +194,13 @@ class OnlineClusterMOEAD(AggregatedGeneticAlgorithm):
             self.save_algorithm_data('time.txt', [time.time() - self.start])
     
     def apply_cluster_reduction(self):
-        if self.current_generation % self.interval_of_aggregations == 0:
-            if not self.use_random_aggregation:
-                dataframe = pd.DataFrame(np.array([individual.F for individual in self.pop]))
-                similarity = 1 - dataframe.corr(method='kendall').values
-                print(dataframe.corr(method='kendall').values)
-                cluster = self.cluster(n_clusters=self.number_of_clusters, affinity='precomputed', linkage='single')
-                cluster.fit(similarity)
-                # cluster = self.cluster(n_clusters=self.number_of_clusters)
-                # cluster.fit(np.array([individual.F for individual in self.pop]).T)
-                self.transformation_matrix = self.get_transformation_matrix(cluster)
-            else:
-                dataframe = pd.DataFrame(np.random.randn(len(self.pop), self.problem.n_obj))
-                similarity = 1 - dataframe.corr(method='kendall').values
-                print(dataframe.corr(method='kendall').values)
-                cluster = self.cluster(n_clusters=self.number_of_clusters, affinity='precomputed', linkage='single')
-                cluster.fit(similarity)
-                # cluster = self.cluster(n_clusters=self.number_of_clusters)
-                # cluster.fit(np.array([individual.F for individual in self.pop]).T)
-                self.transformation_matrix = self.get_transformation_matrix(cluster)
+        dataframe = pd.DataFrame(np.array([individual.F for individual in self.pop]))
+        similarity = 1 - dataframe.corr(method='kendall').values
+        cluster = self.cluster(n_clusters=self.number_of_clusters, affinity='precomputed', linkage='single')
+        cluster.fit(similarity)
+        # cluster = self.cluster(n_clusters=self.number_of_clusters)
+        # cluster.fit(np.array([individual.F for individual in self.pop]).T)
+        self.transformation_matrix = self.get_transformation_matrix(cluster)
 
     def get_aggregation_string(self, transformation_matrix):
         aggregation = []

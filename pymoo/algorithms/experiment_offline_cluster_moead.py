@@ -1,4 +1,4 @@
-from pymoo.algorithms.online_cluster_moead import OnlineClusterMOEAD
+from pymoo.algorithms.offline_cluster_moead import OfflineClusterMOEAD
 from pymoo.algorithms.moead import MOEAD 
 from pymoo.factory import get_problem, get_visualization, get_reference_directions
 from pymoo.optimize import minimize
@@ -9,8 +9,9 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.cluster import AgglomerativeClustering, KMeans
+import time
 
-class ExperimentOnlineClusterMOEAD(object):
+class ExperimentOfflineClusterMOEAD(object):
 
     def __init__(self,
                  ref_dirs,
@@ -19,12 +20,10 @@ class ExperimentOnlineClusterMOEAD(object):
                  prob_neighbor_mating=0.9,
                  cluster=KMeans,
                  number_of_clusters=2,
-                 interval_of_aggregations=1,
                  save_data=True,
                  problem=get_problem("dtlz1"),
                  number_of_executions=1,
                  termination=('n_gen', 100),
-                 use_random_aggregation=False,
                  save_dir='',
                  verbose=False,
                  save_history=True,
@@ -35,36 +34,31 @@ class ExperimentOnlineClusterMOEAD(object):
         self.problem = problem
         self.number_of_executions = number_of_executions
         self.termination = termination
-        self.use_random_aggregation = use_random_aggregation
         self.save_dir = save_dir
         self.verbose = verbose
         self.save_history = save_history
 
         if use_different_seeds:
-            self.algorithms  = [OnlineClusterMOEAD(
+            self.algorithms  = [OfflineClusterMOEAD(
                                         ref_dirs,
                                         n_neighbors=n_neighbors,
                                         decomposition=decomposition,
                                         prob_neighbor_mating=prob_neighbor_mating,
                                         seed=i,
                                         number_of_clusters=number_of_clusters,
-                                        interval_of_aggregations=interval_of_aggregations,
                                         current_execution_number=i,
-                                        use_random_aggregation = use_random_aggregation,
                                         save_dir=self.save_dir,
                                         save_data=self.save_data,
                                         cluster=cluster) for i in range(self.number_of_executions)]
         else:
-            self.algorithms  = [OnlineClusterMOEAD(
+            self.algorithms  = [OfflineClusterMOEAD(
                                         ref_dirs,
                                         n_neighbors=n_neighbors,
                                         decomposition=decomposition,
                                         prob_neighbor_mating=prob_neighbor_mating,
                                         seed=1,
                                         number_of_clusters=number_of_clusters,
-                                        interval_of_aggregations=interval_of_aggregations,
                                         current_execution_number=i,
-                                        use_random_aggregation = use_random_aggregation,
                                         save_dir=self.save_dir,
                                         save_data=self.save_data,
                                         cluster=cluster) for i in range(self.number_of_executions)]
